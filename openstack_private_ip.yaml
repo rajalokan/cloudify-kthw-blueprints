@@ -1,0 +1,116 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/4.4/types.yaml
+  - plugin:cloudify-openstack-plugin
+  - plugin:cloudify-utilities-plugin
+
+
+inputs:
+  server_name:
+    type: string
+
+  agent_user:
+    description: >
+      User for connecting to agent VMs
+    default: centos
+
+  resource_count:
+    description: >
+      No of resources of this type
+    default: 1
+
+  flavor:
+    default: { get_secret: small_image_flavor }
+
+
+dsl_definitions:
+  openstack_config: &openstack_config
+    username: { get_secret: keystone_username }
+    password: { get_secret: keystone_password }
+    auth_url: { get_secret: keystone_auth_url }
+    user_domain_name: { get_secret: keystone_user_domain_name }
+    project_name: { get_secret: keystone_project_name }
+    project_domain_name: { get_secret: keystone_project_domain_name }
+    region: { get_secret: region }
+    insecure: true
+
+
+node_templates:
+  bootstrap:
+    type: cloudify.nodes.Root
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: scripts/bootstrap.sh
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: host
+
+  host:
+    type:  cloudify.openstack.nodes.Server
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: ['alok-', { get_input: server_name } ] }
+      image: { get_secret: centos_core_image }
+      flavor: { get_input: flavor }
+      agent_config:
+        user: { get_input: agent_user }
+        network: external
+        install_method: init_script
+      server:
+        key_name: { get_secret: cloud_key }
+    relationships:
+      - type: cloudify.openstack.server_connected_to_port
+        target: port
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: security_group
+      - type: cloudify.relationships.contained_in
+        target: node_scaling_tier
+
+  security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_secret: default_security_group_name }
+
+  port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: *openstack_config
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: public_network
+      - type: cloudify.relationships.contained_in
+        target: node_scaling_tier
+
+  public_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_secret: public_network_name }
+
+  node_scaling_tier:
+    type: cloudify.nodes.Root
+
+
+groups:
+  node_group:
+    members:
+      - host
+      - port
+
+
+policies:
+  vm_scaling_policy:
+    type: cloudify.policies.scaling
+    properties:
+      default_instances: { get_input: resource_count }
+    targets: [node_group]
+
+
+outputs:
+  private_ip:
+    value: { get_attribute: [ port, fixed_ip_address ] }
