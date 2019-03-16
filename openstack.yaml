@@ -15,10 +15,15 @@ inputs:
       User for connecting to agent VMs
     default: centos
 
-  resource_count:
+  worker_resource_count:
     description: >
       No of resources of this type
-    default: 1
+    default: 3
+
+  master_resource_count:
+    description: >
+      No of resources of this type
+    default: 3
 
 
 dsl_definitions:
@@ -30,7 +35,7 @@ dsl_definitions:
     project_name: { get_secret: keystone_project_name }
     project_domain_name: { get_secret: keystone_project_domain_name }
     region: { get_secret: region }
-    insecure: true
+    # insecure: true
 
 
 node_templates:
@@ -44,38 +49,33 @@ node_templates:
   #     - type: cloudify.relationships.contained_in
   #       target: host
 
-  host:
+  # ////////////////////////////////////////////////////////////////////////////
+
+  master_host:
     type:  cloudify.openstack.nodes.Server
     properties:
       openstack_config: *openstack_config
-      resource_id: { concat: ['alok-', { get_input: server_name } ] }
+      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-master' ] }
       image: { get_secret: centos_core_image }
       flavor: { get_secret: medium_image_flavor  }
       agent_config:
-        user: { get_input: agent_user }
+        # user: { get_input: agent_user }
         # network: external
-        install_method: remote
-        key: { get_secret: cloud_key }
-      # server:
-      #   key_name: { get_secret: cloud_key }
+        # install_method: init_script
+        install_method: none
+      server:
+        key_name: { get_secret: cloud_key }
     relationships:
       - type: cloudify.openstack.server_connected_to_port
-        target: port
+        target: master_port
       - type: cloudify.openstack.server_connected_to_security_group
-        target: security_group
-      - type: cloudify.openstack.server_connected_to_floating_ip
-        target: floating_ip
+        target: kthw_external_security_group
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: kthw_internal_security_group
       - type: cloudify.relationships.contained_in
-        target: node_scaling_tier
+        target: master_scaling_tier
 
-  security_group:
-    type: cloudify.openstack.nodes.SecurityGroup
-    properties:
-      openstack_config: *openstack_config
-      use_external_resource: true
-      resource_id: { get_secret: default_security_group_name }
-
-  port:
+  master_port:
     type: cloudify.openstack.nodes.Port
     properties:
       openstack_config: *openstack_config
@@ -83,17 +83,204 @@ node_templates:
       - type: cloudify.relationships.connected_to
         target: public_network
       - type: cloudify.relationships.contained_in
-        target: node_scaling_tier
+        target: master_scaling_tier
 
-  floating_ip:
+  # ////////////////////////////////////////////////////////////////////////////
+
+  worker_host:
+    type:  cloudify.openstack.nodes.Server
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-worker' ] }
+      image: { get_secret: centos_core_image }
+      flavor: { get_secret: medium_image_flavor  }
+      agent_config:
+        # user: { get_input: agent_user }
+        # network: external
+        # install_method: init_script
+        install_method: none
+      server:
+        key_name: { get_secret: cloud_key }
+    relationships:
+      - type: cloudify.openstack.server_connected_to_port
+        target: worker_port
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: kthw_external_security_group
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: kthw_internal_security_group
+      - type: cloudify.relationships.contained_in
+        target: worker_scaling_tier
+
+  worker_port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: *openstack_config
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: public_network
+      - type: cloudify.relationships.contained_in
+        target: worker_scaling_tier
+
+  # ////////////////////////////////////////////////////////////////////////////
+
+  dns_host:
+    type:  cloudify.openstack.nodes.Server
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-dns' ] }
+      image: { get_secret: centos_core_image }
+      flavor: { get_secret: small_image_flavor  }
+      agent_config:
+        install_method: none
+        # user: { get_input: agent_user }
+        # network: external
+        # install_method: init_script
+      server:
+        key_name: { get_secret: cloud_key }
+    relationships:
+      - type: cloudify.openstack.server_connected_to_port
+        target: dns_port
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: dns_security_group
+      # - type: cloudify.openstack.server_connected_to_security_group
+      #   target: default_security_group
+      - type: cloudify.openstack.server_connected_to_floating_ip
+        target: dns_floating_ip
+
+  dns_security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-dns' ] }
+      rules:
+       # - remote_ip_prefix: 0.0.0.0/0
+       #   direction: ingress
+       #   protocol: icmp
+       - remote_ip_prefix: 0.0.0.0/0
+         direction: ingress
+         protocol: tcp
+         port: 22
+       - remote_ip_prefix: 0.0.0.0/0
+         direction: ingress
+         protocol: tcp
+         port: 53
+       # - remote_ip_prefix: 0.0.0.0/0
+       #   direction: ingress
+       #   protocol: udp
+       #   port: 53
+
+  dns_port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: *openstack_config
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: public_network
+
+  dns_floating_ip:
     type: cloudify.openstack.nodes.FloatingIP
     properties:
       openstack_config: *openstack_config
       floatingip:
         floating_network_name: { get_secret: external_network_name }
+
+  # ////////////////////////////////////////////////////////////////////////////
+
+  lb_host:
+    type:  cloudify.openstack.nodes.Server
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-lb' ] }
+      image: { get_secret: centos_core_image }
+      flavor: { get_secret: small_image_flavor  }
+      agent_config:
+        # user: { get_input: agent_user }
+        # network: external
+        # install_method: init_script
+        install_method: none
+      server:
+        key_name: { get_secret: cloud_key }
     relationships:
-      - type: cloudify.relationships.contained_in
-        target: node_scaling_tier
+      - type: cloudify.openstack.server_connected_to_port
+        target: lb_port
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: kthw_internal_security_group
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: kthw_external_security_group
+      - type: cloudify.openstack.server_connected_to_floating_ip
+        target: lb_floating_ip
+
+  lb_port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: *openstack_config
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: public_network
+
+  lb_floating_ip:
+    type: cloudify.openstack.nodes.FloatingIP
+    properties:
+      openstack_config: *openstack_config
+      floatingip:
+        floating_network_name: { get_secret: external_network_name }
+
+  # ////////////////////////////////////////////////////////////////////////////
+
+  # floating_ip:
+  #   type: cloudify.openstack.nodes.FloatingIP
+  #   properties:
+  #     openstack_config: *openstack_config
+  #     floatingip:
+  #       floating_network_name: { get_secret: external_network_name }
+  #   relationships:
+  #     - type: cloudify.relationships.contained_in
+  #       target: node_scaling_tier
+
+
+  kthw_external_security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-external' ] }
+      rules:
+       # - direction: ingress
+       #   protocol: icmp
+       - remote_ip_prefix: 0.0.0.0/0
+         direction: ingress
+         protocol: tcp
+         port: 22
+       - remote_ip_prefix: 0.0.0.0/0
+         direction: ingress
+         protocol: tcp
+         port: 6443
+
+  kthw_internal_security_group_rules:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+      use_external_resource: true
+      rules:
+       - direction: ingress
+         protocol: tcp
+         remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+       - direction: ingress
+         protocol: udp
+         remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+       # - direction: ingress
+       #   protocol: icmp
+       #   remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: kthw_internal_security_group
+
+  kthw_internal_security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+      description: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
 
   public_network:
     type: cloudify.openstack.nodes.Network
@@ -102,25 +289,38 @@ node_templates:
       use_external_resource: true
       resource_id: { get_secret: public_network_name }
 
-  node_scaling_tier:
+  worker_scaling_tier:
+    type: cloudify.nodes.Root
+
+  master_scaling_tier:
     type: cloudify.nodes.Root
 
 
-# groups:
-#   node_group:
-#     members:
-#       - host
-#       - port
-#
-#
-# policies:
-#   vm_scaling_policy:
-#     type: cloudify.policies.scaling
-#     properties:
-#       default_instances: { get_input: resource_count }
-#     targets: [node_group]
-#
-#
+groups:
+  worker_node_group:
+    members:
+      - worker_host
+      - worker_port
+
+  master_node_group:
+    members:
+      - master_host
+      - master_port
+
+policies:
+  worker_scaling_policy:
+    type: cloudify.policies.scaling
+    properties:
+      default_instances: { get_input: worker_resource_count }
+    targets: [worker_node_group]
+
+  master_scaling_policy:
+    type: cloudify.policies.scaling
+    properties:
+      default_instances: { get_input: master_resource_count }
+    targets: [master_node_group]
+
+
 # outputs:
 #   private_ip:
 #     value: { get_attribute: [ port, fixed_ip_address ] }
