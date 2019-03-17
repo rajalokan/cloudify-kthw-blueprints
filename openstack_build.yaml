@@ -1,0 +1,114 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/4.4/types.yaml
+  - plugin:cloudify-openstack-plugin
+  - plugin:cloudify-utilities-plugin
+
+dsl_definitions:
+  openstack_config: &openstack_config
+    username: { get_secret: keystone_username }
+    password: { get_secret: keystone_password }
+    auth_url: { get_secret: keystone_auth_url }
+    user_domain_name: { get_secret: keystone_user_domain_name }
+    project_name: { get_secret: keystone_project_name }
+    project_domain_name: { get_secret: keystone_project_domain_name }
+    region: { get_secret: region }
+    # insecure: true
+
+
+node_templates:
+
+  build_host:
+    type:  cloudify.openstack.nodes.Server
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-build' ] }
+      image: { get_secret: centos_core_image }
+      flavor: { get_secret: small_image_flavor  }
+      agent_config:
+        # user: { get_input: agent_user }
+        # network: external
+        # install_method: init_script
+        install_method: none
+      server:
+        key_name: { get_secret: cloud_key }
+    relationships:
+      - type: cloudify.openstack.server_connected_to_port
+        target: build_port
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: kthw_internal_security_group
+      - type: cloudify.openstack.server_connected_to_security_group
+        target: kthw_external_security_group
+      - type: cloudify.openstack.server_connected_to_floating_ip
+        target: build_floating_ip
+
+  build_port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: *openstack_config
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: kthw_network
+
+  build_floating_ip:
+    type: cloudify.openstack.nodes.FloatingIP
+    properties:
+      openstack_config: *openstack_config
+      floatingip:
+        floating_network_name: { get_secret: external_network_name }
+
+  # ////////////////////////////////////////////////////////////////////////////
+
+  kthw_external_security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_attribute: [ infra, deployment, outputs, kthw_external_security_group ] }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: infra
+
+  kthw_internal_security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_attribute: [ infra, deployment, outputs, kthw_internal_security_group ] }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: infra
+
+  kthw_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_attribute: [ infra, deployment, outputs, kthw_network ] }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: infra
+
+  infra:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: kthw-infra
+          # blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          # main_file_name: simple-blueprint.yaml
+          external_resource: true
+        deployment:
+          id: kthw-infra
+          outputs:
+            kthw_network: kthw_network
+            kthw_external_security_group: kthw_external_security_group
+            kthw_internal_security_group: kthw_internal_security_group
+        #     public_network_router: public_network_router
+        #     public_network: public_network
+        #     private_network: private_network
+        #     public_subnet: public_subnet
+        #     private_subnet: private_subnet
+          external_resource: true
+        reexecute: false

@@ -39,290 +39,139 @@ dsl_definitions:
 
 
 node_templates:
-  # bootstrap:
-  #   type: cloudify.nodes.Root
-  #   interfaces:
-  #     cloudify.interfaces.lifecycle:
-  #       configure:
-  #         implementation: scripts/bootstrap.sh
-  #   relationships:
-  #     - type: cloudify.relationships.contained_in
-  #       target: host
+
+  masters:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: kthw-masters
+          # blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          # main_file_name: simple-blueprint.yaml
+          external_resource: true
+        deployment:
+          id: kthw-masters
+          # outputs:
+          #   external_network: external_network
+        #     public_network_router: public_network_router
+        #     public_network: public_network
+        #     private_network: private_network
+        #     public_subnet: public_subnet
+        #     private_subnet: private_subnet
+          external_resource: true
+        reexecute: false
+
+  # # ////////////////////////////////////////////////////////////////////////////
+
+  workers:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: kthw-workers
+          # blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          # main_file_name: simple-blueprint.yaml
+          external_resource: true
+        deployment:
+          id: kthw-workers
+          # outputs:
+          #   external_network: external_network
+        #     public_network_router: public_network_router
+        #     public_network: public_network
+        #     private_network: private_network
+        #     public_subnet: public_subnet
+        #     private_subnet: private_subnet
+          external_resource: true
+        reexecute: false
+
+  # # ////////////////////////////////////////////////////////////////////////////
+
+  lb:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: kthw-lb
+          # blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          # main_file_name: simple-blueprint.yaml
+          external_resource: true
+        deployment:
+          id: kthw-lb
+          # outputs:
+          #   external_network: external_network
+        #     public_network_router: public_network_router
+        #     public_network: public_network
+        #     private_network: private_network
+        #     public_subnet: public_subnet
+        #     private_subnet: private_subnet
+          external_resource: true
+        reexecute: false
 
   # ////////////////////////////////////////////////////////////////////////////
 
-  master_host:
-    type:  cloudify.openstack.nodes.Server
+  build:
+    type: cloudify.nodes.DeploymentProxy
     properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-master' ] }
-      image: { get_secret: centos_core_image }
-      flavor: { get_secret: medium_image_flavor  }
-      agent_config:
-        # user: { get_input: agent_user }
-        # network: external
-        # install_method: init_script
-        install_method: none
-      server:
-        key_name: { get_secret: cloud_key }
-    relationships:
-      - type: cloudify.openstack.server_connected_to_port
-        target: master_port
-      - type: cloudify.openstack.server_connected_to_security_group
-        target: kthw_external_security_group
-      - type: cloudify.openstack.server_connected_to_security_group
-        target: kthw_internal_security_group
-      - type: cloudify.relationships.contained_in
-        target: master_scaling_tier
-
-  master_port:
-    type: cloudify.openstack.nodes.Port
-    properties:
-      openstack_config: *openstack_config
-    relationships:
-      - type: cloudify.relationships.connected_to
-        target: public_network
-      - type: cloudify.relationships.contained_in
-        target: master_scaling_tier
+      resource_config:
+        blueprint:
+          id: kthw-build
+          # blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          # main_file_name: simple-blueprint.yaml
+          external_resource: true
+        deployment:
+          id: kthw-build
+          # outputs:
+          #   external_network: external_network
+        #     public_network_router: public_network_router
+        #     public_network: public_network
+        #     private_network: private_network
+        #     public_subnet: public_subnet
+        #     private_subnet: private_subnet
+          external_resource: true
+        reexecute: false
 
   # ////////////////////////////////////////////////////////////////////////////
 
-  worker_host:
-    type:  cloudify.openstack.nodes.Server
+  dns:
+    type: cloudify.nodes.DeploymentProxy
     properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-worker' ] }
-      image: { get_secret: centos_core_image }
-      flavor: { get_secret: medium_image_flavor  }
-      agent_config:
-        # user: { get_input: agent_user }
-        # network: external
-        # install_method: init_script
-        install_method: none
-      server:
-        key_name: { get_secret: cloud_key }
-    relationships:
-      - type: cloudify.openstack.server_connected_to_port
-        target: worker_port
-      - type: cloudify.openstack.server_connected_to_security_group
-        target: kthw_external_security_group
-      - type: cloudify.openstack.server_connected_to_security_group
-        target: kthw_internal_security_group
-      - type: cloudify.relationships.contained_in
-        target: worker_scaling_tier
-
-  worker_port:
-    type: cloudify.openstack.nodes.Port
-    properties:
-      openstack_config: *openstack_config
-    relationships:
-      - type: cloudify.relationships.connected_to
-        target: public_network
-      - type: cloudify.relationships.contained_in
-        target: worker_scaling_tier
+      resource_config:
+        blueprint:
+          id: kthw-dns
+          # blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          # main_file_name: simple-blueprint.yaml
+          external_resource: true
+        deployment:
+          id: kthw-dns
+          # outputs:
+          #   external_network: external_network
+        #     public_network_router: public_network_router
+        #     public_network: public_network
+        #     private_network: private_network
+        #     public_subnet: public_subnet
+        #     private_subnet: private_subnet
+          external_resource: true
+        reexecute: false
 
   # ////////////////////////////////////////////////////////////////////////////
 
-  dns_host:
-    type:  cloudify.openstack.nodes.Server
+  infra:
+    type: cloudify.nodes.DeploymentProxy
     properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-dns' ] }
-      image: { get_secret: centos_core_image }
-      flavor: { get_secret: small_image_flavor  }
-      agent_config:
-        install_method: none
-        # user: { get_input: agent_user }
-        # network: external
-        # install_method: init_script
-      server:
-        key_name: { get_secret: cloud_key }
-    relationships:
-      - type: cloudify.openstack.server_connected_to_port
-        target: dns_port
-      - type: cloudify.openstack.server_connected_to_security_group
-        target: dns_security_group
-      # - type: cloudify.openstack.server_connected_to_security_group
-      #   target: default_security_group
-      - type: cloudify.openstack.server_connected_to_floating_ip
-        target: dns_floating_ip
-
-  dns_security_group:
-    type: cloudify.openstack.nodes.SecurityGroup
-    properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-dns' ] }
-      rules:
-       # - remote_ip_prefix: 0.0.0.0/0
-       #   direction: ingress
-       #   protocol: icmp
-       - remote_ip_prefix: 0.0.0.0/0
-         direction: ingress
-         protocol: tcp
-         port: 22
-       - remote_ip_prefix: 0.0.0.0/0
-         direction: ingress
-         protocol: tcp
-         port: 53
-       # - remote_ip_prefix: 0.0.0.0/0
-       #   direction: ingress
-       #   protocol: udp
-       #   port: 53
-
-  dns_port:
-    type: cloudify.openstack.nodes.Port
-    properties:
-      openstack_config: *openstack_config
-    relationships:
-      - type: cloudify.relationships.connected_to
-        target: public_network
-
-  dns_floating_ip:
-    type: cloudify.openstack.nodes.FloatingIP
-    properties:
-      openstack_config: *openstack_config
-      floatingip:
-        floating_network_name: { get_secret: external_network_name }
-
-  # ////////////////////////////////////////////////////////////////////////////
-
-  lb_host:
-    type:  cloudify.openstack.nodes.Server
-    properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: ns_placeholder }, 'kthw-lb' ] }
-      image: { get_secret: centos_core_image }
-      flavor: { get_secret: small_image_flavor  }
-      agent_config:
-        # user: { get_input: agent_user }
-        # network: external
-        # install_method: init_script
-        install_method: none
-      server:
-        key_name: { get_secret: cloud_key }
-    relationships:
-      - type: cloudify.openstack.server_connected_to_port
-        target: lb_port
-      - type: cloudify.openstack.server_connected_to_security_group
-        target: kthw_internal_security_group
-      - type: cloudify.openstack.server_connected_to_security_group
-        target: kthw_external_security_group
-      - type: cloudify.openstack.server_connected_to_floating_ip
-        target: lb_floating_ip
-
-  lb_port:
-    type: cloudify.openstack.nodes.Port
-    properties:
-      openstack_config: *openstack_config
-    relationships:
-      - type: cloudify.relationships.connected_to
-        target: public_network
-
-  lb_floating_ip:
-    type: cloudify.openstack.nodes.FloatingIP
-    properties:
-      openstack_config: *openstack_config
-      floatingip:
-        floating_network_name: { get_secret: external_network_name }
-
-  # ////////////////////////////////////////////////////////////////////////////
-
-  # floating_ip:
-  #   type: cloudify.openstack.nodes.FloatingIP
-  #   properties:
-  #     openstack_config: *openstack_config
-  #     floatingip:
-  #       floating_network_name: { get_secret: external_network_name }
-  #   relationships:
-  #     - type: cloudify.relationships.contained_in
-  #       target: node_scaling_tier
-
-
-  kthw_external_security_group:
-    type: cloudify.openstack.nodes.SecurityGroup
-    properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-external' ] }
-      rules:
-       # - direction: ingress
-       #   protocol: icmp
-       - remote_ip_prefix: 0.0.0.0/0
-         direction: ingress
-         protocol: tcp
-         port: 22
-       - remote_ip_prefix: 0.0.0.0/0
-         direction: ingress
-         protocol: tcp
-         port: 6443
-
-  kthw_internal_security_group_rules:
-    type: cloudify.openstack.nodes.SecurityGroup
-    properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
-      use_external_resource: true
-      rules:
-       - direction: ingress
-         protocol: tcp
-         remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
-       - direction: ingress
-         protocol: udp
-         remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
-       # - direction: ingress
-       #   protocol: icmp
-       #   remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
-    relationships:
-      - type: cloudify.relationships.connected_to
-        target: kthw_internal_security_group
-
-  kthw_internal_security_group:
-    type: cloudify.openstack.nodes.SecurityGroup
-    properties:
-      openstack_config: *openstack_config
-      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
-      description: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
-
-  public_network:
-    type: cloudify.openstack.nodes.Network
-    properties:
-      openstack_config: *openstack_config
-      use_external_resource: true
-      resource_id: { get_secret: public_network_name }
-
-  worker_scaling_tier:
-    type: cloudify.nodes.Root
-
-  master_scaling_tier:
-    type: cloudify.nodes.Root
-
-
-groups:
-  worker_node_group:
-    members:
-      - worker_host
-      - worker_port
-
-  master_node_group:
-    members:
-      - master_host
-      - master_port
-
-policies:
-  worker_scaling_policy:
-    type: cloudify.policies.scaling
-    properties:
-      default_instances: { get_input: worker_resource_count }
-    targets: [worker_node_group]
-
-  master_scaling_policy:
-    type: cloudify.policies.scaling
-    properties:
-      default_instances: { get_input: master_resource_count }
-    targets: [master_node_group]
-
-
-# outputs:
-#   private_ip:
-#     value: { get_attribute: [ port, fixed_ip_address ] }
-#   public_ip:
-#     value: { get_attribute: [ floating_ip, floating_ip_address ] }
+      resource_config:
+        blueprint:
+          id: kthw-infra
+          # blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          # main_file_name: simple-blueprint.yaml
+          external_resource: true
+        deployment:
+          id: kthw-infra
+          outputs:
+            external_network: external_network
+        #     public_network_router: public_network_router
+        #     public_network: public_network
+        #     private_network: private_network
+        #     public_subnet: public_subnet
+        #     private_subnet: private_subnet
+          external_resource: true
+        reexecute: false

@@ -1,0 +1,118 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/4.4/types.yaml
+  - plugin:cloudify-openstack-plugin
+  - plugin:cloudify-utilities-plugin
+
+dsl_definitions:
+  openstack_config: &openstack_config
+    username: { get_secret: keystone_username }
+    password: { get_secret: keystone_password }
+    auth_url: { get_secret: keystone_auth_url }
+    user_domain_name: { get_secret: keystone_user_domain_name }
+    project_name: { get_secret: keystone_project_name }
+    project_domain_name: { get_secret: keystone_project_domain_name }
+    region: { get_secret: region }
+    # insecure: true
+
+
+node_templates:
+  # ////////////////////////////////////////////////////////////////////////////
+
+  kthw_subnet:
+    type: cloudify.openstack.nodes.Subnet
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw' ] }
+      subnet:
+        ip_version: 4
+        cidr: '192.168.121.0/24'
+        dns_nameservers: ['8.8.4.4', '8.8.8.8']
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: kthw_network
+      - type: cloudify.openstack.subnet_connected_to_router
+        target: kthw_router
+
+  kthw_router:
+    type: cloudify.openstack.nodes.Router
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw' ] }
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: external_network
+
+  kthw_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw' ] }
+
+  # ////////////////////////////////////////////////////////////////////////////
+
+  kthw_external_security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-external' ] }
+      rules:
+       # - direction: ingress
+       #   protocol: icmp
+       - remote_ip_prefix: 0.0.0.0/0
+         direction: ingress
+         protocol: tcp
+         port: 22
+       - remote_ip_prefix: 0.0.0.0/0
+         direction: ingress
+         protocol: tcp
+         port: 6443
+
+  kthw_internal_security_group_rules:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+      use_external_resource: true
+      rules:
+       - direction: ingress
+         protocol: tcp
+         remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+       - direction: ingress
+         protocol: udp
+         remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+       # - direction: ingress
+       #   protocol: icmp
+       #   remote_group_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+    relationships:
+      - type: cloudify.relationships.connected_to
+        target: kthw_internal_security_group
+
+  kthw_internal_security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      resource_id: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+      description: { concat: [ { get_secret: 'ns_placeholder' }, 'kthw-internal' ] }
+
+  external_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_secret: external_network_name }
+
+outputs:
+
+  external_network:
+    value: { get_attribute: [ external_network, external_id ] }
+
+  kthw_internal_security_group:
+    value: { get_attribute: [ kthw_internal_security_group, external_id ] }
+
+  kthw_external_security_group:
+    value: { get_attribute: [ kthw_external_security_group, external_id ] }
+
+  kthw_network:
+    value: { get_attribute: [ kthw_network, external_id ] }
