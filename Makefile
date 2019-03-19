@@ -1,9 +1,9 @@
-bootstrap:
+bootstrap_cfy:
 	cfy install openstack.yaml \
 		-b kthw \
 		-i server_name=kthw
 
-uninstall:
+uninstall_cfy:
 	cfy uninstall kthw -p ignore_failure=true
 
 output:
@@ -11,6 +11,12 @@ output:
 
 cancel_install:
 	cfy exec cancel `cfy exec li -d kthw | grep "started " | cut -d'|' -f2`
+
+# //////////////////////////////////////////////////////////////////////////////
+
+bootstrap_all: bootstrap_infra bootstrap_dns bootstrap_build bootstrap_lb bootstrap_workers bootstrap_masters
+
+uninstall_all: uninstall_masters uninstall_workers uninstall_lb uninstall_build uninstall_dns uninstall_infra
 
 # //////////////////////////////////////////////////////////////////////////////
 
